@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fantasia BBW - Inicio</title>
+    <link rel="stylesheet" href="css/estilo.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Estilos específicos para el muro de publicaciones */
+        .posts-wall {
+            max-width: 800px;
+            margin: 30px auto;
+        }
+        
+        .post-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: var(--transition);
+        }
+        
+        .post-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+        
+        .post-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .post-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+        }
+        
+        .post-user-info {
+            flex: 1;
+        }
+        
+        .post-user-name {
+            margin: 0;
+            color: var(--light);
+            font-weight: 500;
+        }
+        
+        .post-time {
+            margin: 0;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+        }
+        
+        .post-content {
+            margin-bottom: 15px;
+            color: var(--light);
+            line-height: 1.5;
+        }
+        
+        .post-image {
+            width: 100%;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            max-height: 500px;
+            object-fit: cover;
+        }
+        
+        .post-actions {
+            display: flex;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 15px;
+        }
+        
+        .post-action {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            display: flex;
+            align-items: center;
+            margin-right: 20px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .post-action:hover {
+            color: var(--accent);
+        }
+        
+        .post-action i {
+            margin-right: 5px;
+        }
+        
+        .delete-post {
+            margin-left: auto;
+            color: #ff6b6b !important;
+            display: none; /* Solo visible para el dueño del post */
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-content">
+            <h1>Fantasia BBW</h1>
+            <div class="user-menu">
+                <button class="theme-toggle" id="theme-toggle">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <button id="menu-btn"><i class="fas fa-ellipsis-v"></i></button>
+                <div class="dropdown-menu" id="dropdown-menu">
+                    <a href="home.html"><i class="fas fa-home"></i> Inicio</a>
+                    <a href="personas.html"><i class="fas fa-users"></i> Mi Muro</a>
+                    <a href="perfil.html"><i class="fas fa-user-edit"></i> Perfil</a>
+                    <a href="#" id="logout-btn"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <main class="app-main">
+        <div class="welcome-section">
+            <h2 id="welcome-message">Bienvenido/a</h2>
+            <p>Conecta con personas increíbles en nuestra comunidad</p>
+        </div>
+        
+        <div class="features-grid">
+            <div class="feature-card" id="personas-card">
+                <i class="fas fa-users"></i>
+                <h3>Personas</h3>
+                <p>Conoce nuevas personas</p>
+            </div>
+            
+            <div class="feature-card" id="videollamada-card">
+                <i class="fas fa-video"></i>
+                <h3>Video llamada</h3>
+                <p>Conéctate en tiempo real</p>
+            </div>
+            
+            <div class="feature-card" id="chat-card">
+                <i class="fas fa-comments"></i>
+                <h3>Chat</h3>
+                <p>Envía mensajes privados</p>
+            </div>
+            
+            <div class="feature-card" id="contenidos-card">
+                <i class="fas fa-camera"></i>
+                <h3>Contenidos</h3>
+                <p>Contenido exclusivo</p>
+            </div>
+        </div>
+        
+        <div class="posts-wall" id="posts-wall">
+            <!-- Publicaciones se cargarán aquí dinámicamente -->
+        </div>
+    </main>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <script src="js/home.js"></script>
+</body>
+</html>

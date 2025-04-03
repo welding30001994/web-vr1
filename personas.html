@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fantasia BBW - Mi Muro</title>
+    <link rel="stylesheet" href="css/estilo.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .posts-container {
+            max-width: 800px;
+            margin: 30px auto;
+        }
+        
+        .create-post {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        .post-textarea {
+            width: 100%;
+            padding: 15px;
+            border-radius: 10px;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--light);
+            min-height: 100px;
+            margin-bottom: 15px;
+            resize: none;
+        }
+        
+        .post-textarea::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .post-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .post-button {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .post-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(110, 0, 255, 0.3);
+        }
+        
+        .upload-post-btn {
+            background: none;
+            border: none;
+            color: var(--accent);
+            font-size: 20px;
+            cursor: pointer;
+        }
+        
+        .posts-list {
+            display: grid;
+            gap: 20px;
+        }
+        
+        .post {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: var(--transition);
+        }
+        
+        .post:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+        
+        .post-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .post-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+        }
+        
+        .post-user {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .post-time {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .post-content {
+            margin-bottom: 15px;
+        }
+        
+        .post-image {
+            width: 100%;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            max-height: 500px;
+            object-fit: cover;
+        }
+        
+        .post-actions-bar {
+            display: flex;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 15px;
+        }
+        
+        .post-action {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            display: flex;
+            align-items: center;
+            margin-right: 20px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .post-action:hover {
+            color: var(--accent);
+        }
+        
+        .post-action i {
+            margin-right: 5px;
+        }
+        
+        /* Modal para subir imágenes */
+        .upload-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .upload-content {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        .upload-preview {
+            max-width: 100%;
+            max-height: 300px;
+            display: block;
+            margin: 10px auto;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-content">
+            <h1>Fantasia BBW</h1>
+            <div class="user-menu">
+                <button class="theme-toggle" id="theme-toggle">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <button id="menu-btn"><i class="fas fa-ellipsis-v"></i></button>
+                <div class="dropdown-menu" id="dropdown-menu">
+                    <a href="home.html"><i class="fas fa-home"></i> Inicio</a>
+                    <a href="perfil.html"><i class="fas fa-user-edit"></i> Perfil</a>
+                    <a href="#" id="logout-btn"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <main class="app-main">
+        <div class="posts-container">
+            <h2><i class="fas fa-user-circle"></i> Mi Muro Personal</h2>
+            
+            <div class="create-post">
+                <textarea class="post-textarea" id="post-content" placeholder="¿Qué estás pensando?"></textarea>
+                <div class="post-actions">
+                    <button class="upload-post-btn" id="upload-post-btn">
+                        <i class="fas fa-image"></i> Subir imagen
+                    </button>
+                    <button class="post-button" id="post-btn">Publicar</button>
+                </div>
+                <input type="file" id="post-image-input" accept="image/*" style="display: none;">
+            </div>
+            
+            <div class="posts-list" id="posts-list">
+                <!-- Publicaciones se cargarán aquí -->
+            </div>
+        </div>
+    </main>
+    
+    <!-- Modal para subir imágenes -->
+    <div class="upload-modal" id="upload-modal">
+        <div class="upload-content">
+            <h3>Subir imagen</h3>
+            <img id="upload-preview" class="upload-preview" style="display: none;">
+            <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                <button id="cancel-upload" class="btn">Cancelar</button>
+                <button id="confirm-upload" class="btn" style="background: var(--primary);">Subir</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-storage-compat.js"></script>
+    <script src="js/personas.js"></script>
+</body>
+</html>
