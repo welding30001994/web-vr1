@@ -33,6 +33,7 @@ const callSetup = document.getElementById('call-setup');
 const callIdInput = document.getElementById('call-id');
 const startCallBtn = document.getElementById('start-call-btn');
 const joinCallBtn = document.getElementById('join-call-btn');
+const copyIdBtn = document.getElementById('copy-id-btn');
 const videoContainer = document.getElementById('video-container');
 const callControls = document.getElementById('call-controls');
 const localVideo = document.getElementById('local-video');
@@ -40,6 +41,7 @@ const remoteVideo = document.getElementById('remote-video');
 const muteBtn = document.getElementById('mute-btn');
 const videoBtn = document.getElementById('video-btn');
 const endCallBtn = document.getElementById('end-call-btn');
+const statusMessage = document.getElementById('status-message');
 
 // Configuración del tema
 const currentTheme = localStorage.getItem('theme') || 'dark';
@@ -83,15 +85,27 @@ function updateThemeIcon() {
   }
 }
 
-// Configuración de WebRTC (simplificada)
+// Configuración de WebRTC
 async function setupWebRTC() {
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    showStatus('Obteniendo acceso a cámara y micrófono...');
+    
+    localStream = await navigator.mediaDevices.getUserMedia({ 
+      video: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }, 
+      audio: true 
+    });
     localVideo.srcObject = localStream;
     
-    // Configuración básica de PeerConnection (debes implementar según tu necesidad)
+    // Configuración de PeerConnection
     const configuration = {
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
     };
     
     peerConnection = new RTCPeerConnection(configuration);
@@ -105,6 +119,15 @@ async function setupWebRTC() {
     peerConnection.ontrack = event => {
       remoteVideo.srcObject = event.streams[0];
       remoteStream = event.streams[0];
+      showStatus('Conexión establecida');
+    };
+    
+    // Manejar cambios en la conexión
+    peerConnection.oniceconnectionstatechange = () => {
+      if (peerConnection.iceConnectionState === 'disconnected') {
+        showStatus('Usuario desconectado');
+        endCall();
+      }
     };
     
     // Manejar ICE candidates
@@ -119,91 +142,138 @@ async function setupWebRTC() {
     
   } catch (error) {
     console.error('Error al acceder a los dispositivos:', error);
-    alert('No se pudo acceder a la cámara/micrófono');
+    showStatus('Error al acceder a cámara/micrófono', 'error');
   }
 }
 
 // Iniciar llamada
 startCallBtn.addEventListener('click', async () => {
   roomId = callIdInput.value.trim() || generateRoomId();
-  if (!roomId) return;
+  
+  if (!roomId) {
+    showStatus('Por favor ingresa un ID válido', 'error');
+    return;
+  }
+  
+  // Mostrar el ID generado al usuario
+  if (!callIdInput.value.trim()) {
+    callIdInput.value = roomId;
+    showStatus(`ID de llamada generado: ${roomId}. Comparte este ID con tu contacto.`);
+  }
   
   isCaller = true;
   await setupWebRTC();
   
   // Crear oferta
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
+  try {
+    showStatus('Creando oferta de llamada...');
+    const offer = await peerConnection.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true
+    });
+    
+    await peerConnection.setLocalDescription(offer);
+    
+    // Guardar oferta en Firebase
+    await database.ref(`rooms/${roomId}`).set({
+      offer: offer,
+      caller: auth.currentUser.uid,
+      createdAt: firebase.database.ServerValue.TIMESTAMP
+    });
+    
+    // Escuchar respuesta
+    database.ref(`rooms/${roomId}/answer`).on('value', async snapshot => {
+      const answer = snapshot.val();
+      if (answer) {
+        showStatus('Usuario conectado!');
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      }
+    });
+    
+    // Escuchar ICE candidates
+    database.ref(`rooms/${roomId}/candidates`).on('child_added', async snapshot => {
+      const data = snapshot.val();
+      if (data.sender === 'callee') {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      }
+    });
+    
+    // Mostrar UI de llamada
+    showCallUI();
+    
+    // Limpiar sala después de 24 horas
+    setTimeout(() => {
+      database.ref(`rooms/${roomId}`).remove();
+    }, 24 * 60 * 60 * 1000);
+    
+  } catch (error) {
+    console.error('Error al iniciar llamada:', error);
+    showStatus('Error al iniciar la llamada', 'error');
+  }
+});
+
+// Copiar ID al portapapeles
+copyIdBtn.addEventListener('click', () => {
+  if (!roomId) {
+    showStatus('Primero genera un ID de llamada', 'error');
+    return;
+  }
   
-  // Guardar oferta en Firebase
-  database.ref(`rooms/${roomId}`).set({
-    offer: offer,
-    caller: auth.currentUser.uid
-  });
-  
-  // Escuchar respuesta
-  database.ref(`rooms/${roomId}/answer`).on('value', async snapshot => {
-    const answer = snapshot.val();
-    if (answer) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-    }
-  });
-  
-  // Escuchar ICE candidates
-  database.ref(`rooms/${roomId}/candidates`).on('child_added', async snapshot => {
-    const data = snapshot.val();
-    if (data.sender === 'callee') {
-      await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-    }
-  });
-  
-  // Mostrar UI de llamada
-  showCallUI();
+  callIdInput.select();
+  document.execCommand('copy');
+  showStatus('ID copiado al portapapeles!');
 });
 
 // Unirse a llamada
 joinCallBtn.addEventListener('click', async () => {
   roomId = callIdInput.value.trim();
-  if (!roomId) return;
+  
+  if (!roomId) {
+    showStatus('Por favor ingresa un ID válido', 'error');
+    return;
+  }
+  
+  // Verificar si la sala existe
+  const roomRef = database.ref(`rooms/${roomId}`);
+  const snapshot = await roomRef.once('value');
+  
+  if (!snapshot.exists() || !snapshot.val().offer) {
+    showStatus('No existe una llamada con ese ID', 'error');
+    return;
+  }
   
   isCaller = false;
   await setupWebRTC();
   
-  // Escuchar oferta
-  database.ref(`rooms/${roomId}`).on('value', async snapshot => {
+  try {
+    showStatus('Uniéndose a la llamada...');
     const data = snapshot.val();
-    if (data && data.offer) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-      
-      // Crear respuesta
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      
-      // Guardar respuesta en Firebase
-      database.ref(`rooms/${roomId}/answer`).set(answer);
-    }
-  });
-  
-  // Escuchar ICE candidates
-  database.ref(`rooms/${roomId}/candidates`).on('child_added', async snapshot => {
-    const data = snapshot.val();
-    if (data.sender === 'caller') {
-      await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-    }
-  });
-  
-  // Enviar ICE candidates
-  peerConnection.onicecandidate = event => {
-    if (event.candidate) {
-      database.ref(`rooms/${roomId}/candidates`).push({
-        sender: 'callee',
-        candidate: event.candidate
-      });
-    }
-  };
-  
-  // Mostrar UI de llamada
-  showCallUI();
+    
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+    
+    // Crear respuesta
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    
+    // Guardar respuesta en Firebase
+    await database.ref(`rooms/${roomId}/answer`).set(answer);
+    
+    // Escuchar ICE candidates
+    database.ref(`rooms/${roomId}/candidates`).on('child_added', async snapshot => {
+      const data = snapshot.val();
+      if (data.sender === 'caller') {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      }
+    });
+    
+    // Mostrar UI de llamada
+    showCallUI();
+    showStatus('Conectado a la llamada!');
+    
+  } catch (error) {
+    console.error('Error al unirse a la llamada:', error);
+    showStatus('Error al unirse a la llamada', 'error');
+  }
 });
 
 // Mostrar UI de llamada
@@ -211,6 +281,14 @@ function showCallUI() {
   callSetup.style.display = 'none';
   videoContainer.style.display = 'grid';
   callControls.style.display = 'flex';
+  statusMessage.style.display = 'none';
+}
+
+// Mostrar mensaje de estado
+function showStatus(message, type = 'info') {
+  statusMessage.textContent = message;
+  statusMessage.style.display = 'block';
+  statusMessage.className = type;
 }
 
 // Finalizar llamada
@@ -235,7 +313,9 @@ function endCall() {
   // Limpiar Firebase
   if (roomId) {
     database.ref(`rooms/${roomId}`).off();
-    database.ref(`rooms/${roomId}`).remove();
+    if (isCaller) {
+      database.ref(`rooms/${roomId}`).remove();
+    }
   }
   
   // Restaurar UI
@@ -244,6 +324,8 @@ function endCall() {
   callControls.style.display = 'none';
   localVideo.srcObject = null;
   remoteVideo.srcObject = null;
+  callIdInput.value = '';
+  showStatus('Llamada finalizada');
 }
 
 // Controles de llamada
@@ -265,14 +347,35 @@ videoBtn.addEventListener('click', () => {
   });
 });
 
-// Generar ID de sala aleatorio
+// Generar ID de sala fácil de compartir
 function generateRoomId() {
-  return Math.random().toString(36).substring(2, 9);
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Elimina caracteres confusos
+  let result = '';
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 }
 
 // Verificar autenticación
 auth.onAuthStateChanged(user => {
   if (!user) {
     window.location.href = 'index.html';
+  } else {
+    showStatus('Bienvenido! Puedes iniciar o unirte a una llamada');
   }
+});
+
+// Limpiar salas antiguas al cargar
+window.addEventListener('load', () => {
+  // Limpiar salas con más de 1 hora de antigüedad
+  database.ref('rooms').once('value').then(snapshot => {
+    const now = Date.now();
+    snapshot.forEach(room => {
+      const createdAt = room.child('createdAt').val();
+      if (createdAt && (now - createdAt) > 3600000) { // 1 hora
+        database.ref(`rooms/${room.key}`).remove();
+      }
+    });
+  });
 });
