@@ -23,6 +23,8 @@ let remoteStream;
 let peerConnection;
 let roomId;
 let isCaller = false;
+let screenStream;
+let isSharingScreen = false;
 
 // Elementos del DOM
 const menuBtn = document.getElementById('menu-btn');
@@ -33,7 +35,6 @@ const callSetup = document.getElementById('call-setup');
 const callIdInput = document.getElementById('call-id');
 const startCallBtn = document.getElementById('start-call-btn');
 const joinCallBtn = document.getElementById('join-call-btn');
-const copyIdBtn = document.getElementById('copy-id-btn');
 const videoContainer = document.getElementById('video-container');
 const callControls = document.getElementById('call-controls');
 const localVideo = document.getElementById('local-video');
@@ -41,7 +42,6 @@ const remoteVideo = document.getElementById('remote-video');
 const muteBtn = document.getElementById('mute-btn');
 const videoBtn = document.getElementById('video-btn');
 const endCallBtn = document.getElementById('end-call-btn');
-const statusMessage = document.getElementById('status-message');
 
 // Configuración del tema
 const currentTheme = localStorage.getItem('theme') || 'dark';
@@ -85,26 +85,43 @@ function updateThemeIcon() {
   }
 }
 
-// Configuración de WebRTC
+// Configuración de WebRTC con mejores servidores ICE
 async function setupWebRTC() {
   try {
-    showStatus('Obteniendo acceso a cámara y micrófono...');
+    // Mostrar animación de carga
+    localVideo.style.background = 'linear-gradient(45deg, #ff00cc, #3333ff)';
+    localVideo.style.backgroundSize = '400% 400%';
+    localVideo.style.animation = 'gradientBG 5s ease infinite';
     
     localStream = await navigator.mediaDevices.getUserMedia({ 
       video: {
         width: { ideal: 1280 },
-        height: { ideal: 720 }
+        height: { ideal: 720 },
+        facingMode: 'user'
       }, 
-      audio: true 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
     });
-    localVideo.srcObject = localStream;
     
-    // Configuración de PeerConnection
+    // Aplicar efecto espejo al video local
+    localVideo.style.transform = 'scaleX(-1)';
+    localVideo.srcObject = localStream;
+    localVideo.style.animation = 'none';
+    
+    // Configuración mejorada de PeerConnection
     const configuration = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { 
+          urls: 'turn:numb.viagenie.ca',
+          credential: 'muazkh',
+          username: 'webrtc@live.com'
+        }
       ]
     };
     
@@ -115,18 +132,23 @@ async function setupWebRTC() {
       peerConnection.addTrack(track, localStream);
     });
     
-    // Manejar stream remoto
+    // Manejar stream remoto con animación
     peerConnection.ontrack = event => {
       remoteVideo.srcObject = event.streams[0];
       remoteStream = event.streams[0];
-      showStatus('Conexión establecida');
+      
+      // Animación cuando se conecta el video remoto
+      remoteVideo.style.animation = 'fadeIn 1s ease-in';
+      setTimeout(() => {
+        remoteVideo.style.animation = '';
+      }, 1000);
     };
     
     // Manejar cambios en la conexión
     peerConnection.oniceconnectionstatechange = () => {
       if (peerConnection.iceConnectionState === 'disconnected') {
-        showStatus('Usuario desconectado');
-        endCall();
+        showNotification('Usuario desconectado');
+        setTimeout(() => endCall(), 2000);
       }
     };
     
@@ -140,9 +162,25 @@ async function setupWebRTC() {
       }
     };
     
+    // Manejar negociación de conexión
+    peerConnection.onnegotiationneeded = async () => {
+      try {
+        if (isCaller) {
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+          await database.ref(`rooms/${roomId}`).update({
+            offer: peerConnection.localDescription
+          });
+        }
+      } catch (error) {
+        console.error('Error en negociación:', error);
+      }
+    };
+    
   } catch (error) {
     console.error('Error al acceder a los dispositivos:', error);
-    showStatus('Error al acceder a cámara/micrófono', 'error');
+    showNotification('No se pudo acceder a la cámara/micrófono', 'error');
+    localVideo.style.animation = 'none';
   }
 }
 
@@ -151,22 +189,21 @@ startCallBtn.addEventListener('click', async () => {
   roomId = callIdInput.value.trim() || generateRoomId();
   
   if (!roomId) {
-    showStatus('Por favor ingresa un ID válido', 'error');
+    showNotification('Por favor ingresa un ID válido', 'error');
     return;
   }
   
   // Mostrar el ID generado al usuario
   if (!callIdInput.value.trim()) {
     callIdInput.value = roomId;
-    showStatus(`ID de llamada generado: ${roomId}. Comparte este ID con tu contacto.`);
+    showNotification(`ID de llamada generado: ${roomId}. Comparte este ID.`);
   }
   
   isCaller = true;
   await setupWebRTC();
   
-  // Crear oferta
   try {
-    showStatus('Creando oferta de llamada...');
+    // Crear oferta
     const offer = await peerConnection.createOffer({
       offerToReceiveAudio: true,
       offerToReceiveVideo: true
@@ -178,15 +215,16 @@ startCallBtn.addEventListener('click', async () => {
     await database.ref(`rooms/${roomId}`).set({
       offer: offer,
       caller: auth.currentUser.uid,
-      createdAt: firebase.database.ServerValue.TIMESTAMP
+      createdAt: firebase.database.ServerValue.TIMESTAMP,
+      screenSharing: false
     });
     
     // Escuchar respuesta
     database.ref(`rooms/${roomId}/answer`).on('value', async snapshot => {
       const answer = snapshot.val();
       if (answer) {
-        showStatus('Usuario conectado!');
         await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        showNotification('Usuario conectado!');
       }
     });
     
@@ -198,30 +236,20 @@ startCallBtn.addEventListener('click', async () => {
       }
     });
     
+    // Escuchar solicitud de compartir pantalla
+    database.ref(`rooms/${roomId}/screenSharing`).on('value', snapshot => {
+      if (snapshot.val() === true && !isCaller) {
+        showNotification('El usuario está compartiendo pantalla');
+      }
+    });
+    
     // Mostrar UI de llamada
     showCallUI();
     
-    // Limpiar sala después de 24 horas
-    setTimeout(() => {
-      database.ref(`rooms/${roomId}`).remove();
-    }, 24 * 60 * 60 * 1000);
-    
   } catch (error) {
     console.error('Error al iniciar llamada:', error);
-    showStatus('Error al iniciar la llamada', 'error');
+    showNotification('Error al iniciar la llamada', 'error');
   }
-});
-
-// Copiar ID al portapapeles
-copyIdBtn.addEventListener('click', () => {
-  if (!roomId) {
-    showStatus('Primero genera un ID de llamada', 'error');
-    return;
-  }
-  
-  callIdInput.select();
-  document.execCommand('copy');
-  showStatus('ID copiado al portapapeles!');
 });
 
 // Unirse a llamada
@@ -229,7 +257,7 @@ joinCallBtn.addEventListener('click', async () => {
   roomId = callIdInput.value.trim();
   
   if (!roomId) {
-    showStatus('Por favor ingresa un ID válido', 'error');
+    showNotification('Por favor ingresa un ID válido', 'error');
     return;
   }
   
@@ -238,7 +266,7 @@ joinCallBtn.addEventListener('click', async () => {
   const snapshot = await roomRef.once('value');
   
   if (!snapshot.exists() || !snapshot.val().offer) {
-    showStatus('No existe una llamada con ese ID', 'error');
+    showNotification('No existe una llamada con ese ID', 'error');
     return;
   }
   
@@ -246,7 +274,6 @@ joinCallBtn.addEventListener('click', async () => {
   await setupWebRTC();
   
   try {
-    showStatus('Uniéndose a la llamada...');
     const data = snapshot.val();
     
     await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
@@ -266,13 +293,20 @@ joinCallBtn.addEventListener('click', async () => {
       }
     });
     
+    // Escuchar solicitud de compartir pantalla
+    database.ref(`rooms/${roomId}/screenSharing`).on('value', snapshot => {
+      if (snapshot.val() === true) {
+        showNotification('El usuario está compartiendo pantalla');
+      }
+    });
+    
     // Mostrar UI de llamada
     showCallUI();
-    showStatus('Conectado a la llamada!');
+    showNotification('Conectado a la llamada!');
     
   } catch (error) {
     console.error('Error al unirse a la llamada:', error);
-    showStatus('Error al unirse a la llamada', 'error');
+    showNotification('Error al unirse a la llamada', 'error');
   }
 });
 
@@ -281,14 +315,73 @@ function showCallUI() {
   callSetup.style.display = 'none';
   videoContainer.style.display = 'grid';
   callControls.style.display = 'flex';
-  statusMessage.style.display = 'none';
+  
+  // Agregar botón de compartir pantalla si no existe
+  if (!document.getElementById('screen-share-btn')) {
+    const screenShareBtn = document.createElement('button');
+    screenShareBtn.id = 'screen-share-btn';
+    screenShareBtn.className = 'control-button';
+    screenShareBtn.innerHTML = '<i class="fas fa-desktop"></i>';
+    screenShareBtn.title = 'Compartir pantalla';
+    screenShareBtn.addEventListener('click', toggleScreenShare);
+    callControls.insertBefore(screenShareBtn, endCallBtn);
+  }
 }
 
-// Mostrar mensaje de estado
-function showStatus(message, type = 'info') {
-  statusMessage.textContent = message;
-  statusMessage.style.display = 'block';
-  statusMessage.className = type;
+// Compartir pantalla
+async function toggleScreenShare() {
+  try {
+    if (!isSharingScreen) {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true
+      });
+      
+      // Reemplazar pista de video
+      const videoTrack = screenStream.getVideoTracks()[0];
+      const sender = peerConnection.getSenders().find(s => s.track.kind === 'video');
+      await sender.replaceTrack(videoTrack);
+      
+      // Mostrar notificación
+      showNotification('Compartiendo pantalla');
+      isSharingScreen = true;
+      
+      // Notificar al otro usuario
+      if (isCaller) {
+        await database.ref(`rooms/${roomId}`).update({
+          screenSharing: true
+        });
+      }
+      
+      // Cuando se detiene el compartir pantalla
+      videoTrack.onended = () => {
+        toggleScreenShare();
+      };
+      
+    } else {
+      // Volver a la cámara normal
+      const videoTrack = localStream.getVideoTracks()[0];
+      const sender = peerConnection.getSenders().find(s => s.track.kind === 'video');
+      await sender.replaceTrack(videoTrack);
+      
+      // Detener el stream de pantalla
+      screenStream.getTracks().forEach(track => track.stop());
+      screenStream = null;
+      isSharingScreen = false;
+      
+      // Notificar al otro usuario
+      if (isCaller) {
+        await database.ref(`rooms/${roomId}`).update({
+          screenSharing: false
+        });
+      }
+      
+      showNotification('Dejaste de compartir pantalla');
+    }
+  } catch (error) {
+    console.error('Error al compartir pantalla:', error);
+    showNotification('Error al compartir pantalla', 'error');
+  }
 }
 
 // Finalizar llamada
@@ -303,6 +396,9 @@ function endCall() {
   }
   if (remoteStream) {
     remoteStream.getTracks().forEach(track => track.stop());
+  }
+  if (screenStream) {
+    screenStream.getTracks().forEach(track => track.stop());
   }
   
   // Limpiar conexión
@@ -325,7 +421,12 @@ function endCall() {
   localVideo.srcObject = null;
   remoteVideo.srcObject = null;
   callIdInput.value = '';
-  showStatus('Llamada finalizada');
+  
+  // Eliminar botón de compartir pantalla si existe
+  const screenShareBtn = document.getElementById('screen-share-btn');
+  if (screenShareBtn) {
+    screenShareBtn.remove();
+  }
 }
 
 // Controles de llamada
@@ -357,25 +458,64 @@ function generateRoomId() {
   return result;
 }
 
+// Mostrar notificación
+function showNotification(message, type = 'info') {
+  // Crear notificación si no existe
+  if (!document.getElementById('notification-container')) {
+    const notificationContainer = document.createElement('div');
+    notificationContainer.id = 'notification-container';
+    notificationContainer.style.position = 'fixed';
+    notificationContainer.style.bottom = '20px';
+    notificationContainer.style.right = '20px';
+    notificationContainer.style.zIndex = '1000';
+    document.body.appendChild(notificationContainer);
+  }
+  
+  const notification = document.createElement('div');
+  notification.className = `notification ${type}`;
+  notification.textContent = message;
+  
+  // Estilos para la notificación
+  notification.style.padding = '15px 25px';
+  notification.style.margin = '10px 0';
+  notification.style.borderRadius = '8px';
+  notification.style.color = 'white';
+  notification.style.backgroundColor = type === 'error' ? '#ff4444' : '#4285f4';
+  notification.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+  notification.style.animation = 'fadeIn 0.5s, fadeOut 0.5s 2.5s forwards';
+  
+  document.getElementById('notification-container').appendChild(notification);
+  
+  // Eliminar notificación después de 3 segundos
+  setTimeout(() => {
+    notification.remove();
+  }, 3000);
+}
+
 // Verificar autenticación
 auth.onAuthStateChanged(user => {
   if (!user) {
     window.location.href = 'index.html';
-  } else {
-    showStatus('Bienvenido! Puedes iniciar o unirte a una llamada');
   }
 });
 
-// Limpiar salas antiguas al cargar
-window.addEventListener('load', () => {
-  // Limpiar salas con más de 1 hora de antigüedad
-  database.ref('rooms').once('value').then(snapshot => {
-    const now = Date.now();
-    snapshot.forEach(room => {
-      const createdAt = room.child('createdAt').val();
-      if (createdAt && (now - createdAt) > 3600000) { // 1 hora
-        database.ref(`rooms/${room.key}`).remove();
-      }
-    });
-  });
-});
+// Agregar estilos para animaciones
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  @keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  
+  @keyframes gradientBG {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+`;
+document.head.appendChild(style);
